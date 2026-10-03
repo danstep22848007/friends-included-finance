@@ -79,10 +79,14 @@ export async function ensureSheets() {
   const missing = ['Sales', 'Expenses'].filter(title => !existing.has(title));
   if (missing.length) await googleRequest(':batchUpdate', 'POST', { requests: missing.map(title => ({ addSheet: { properties: { title } } })) });
   const ids = missing.length ? await googleRequest('?fields=sheets.properties(title%2CsheetId)', 'GET') as typeof metadata : metadata;
-  const defaultSheet = ids.sheets?.find(s => s.properties.title === 'Sheet1');
-  if (defaultSheet) {
-    const content = await googleRequest(`/values/${encodeURIComponent('Sheet1!A1:Z20')}`, 'GET') as { values?: unknown[][] };
-    if (!content.values?.length) await googleRequest(':batchUpdate', 'POST', { requests: [{ deleteSheet: { sheetId: defaultSheet.properties.sheetId } }] });
+  for (const sheet of ids.sheets ?? []) {
+    if (sheet.properties.title === 'Sales' || sheet.properties.title === 'Expenses') continue;
+    const content = await googleRequest(`/values/${encodeURIComponent(`${sheet.properties.title}!A1:Z20`)}`, 'GET') as { values?: unknown[][] };
+    if (!content.values?.length) {
+      await googleRequest(':batchUpdate', 'POST', {
+        requests: [{ deleteSheet: { sheetId: sheet.properties.sheetId } }],
+      });
+    }
   }
   for (const [title, header] of [['Sales', salesHeader], ['Expenses', expenseHeader]] as const) {
     await googleRequest(`/values/${encodeURIComponent(`${title}!A1`)}?valueInputOption=RAW`, 'PUT', { values: [header] });
